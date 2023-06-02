@@ -19,15 +19,15 @@ enum colours { white = 0,
 
 colours racingColour = green;
 
-int WHITE[4] = {870, 1300, 630, 700};
-int RED[4] = {3200, 3050, 2700, 3020};
-int BLUE[4] = {3230, 3290, 3050, 3100};
-int GREEN[4] = {2620, 2950, 2680, 2570};
-int BLACK[4] = {3900, 3725, 3520, 3780};
+int WHITE[4] = {700, 350, 275, 410};
+int GREEN[4] = {2300, 1750, 1350, 2250};
+int RED[4] = {3000, 2330, 1850, 2900};
+int BLUE[4] = {2900, 2400, 2000, 2850};
+int BLACK[4] = {3850, 3200, 2900, 3700};
 int THRESHOLDS[4] = {(WHITE[0] + GREEN[0]) / 2, (WHITE[1] + GREEN[1]) / 2, (WHITE[2] + GREEN[2]) / 2, (WHITE[3] + GREEN[3]) / 2};
 
 void setMotors();
-float getLinePosition(float prev, int s0, int s1, int s2, int s3);
+float getLinePosition(float prev, int s[4]);
 void doPID();
 
 void setup() {
@@ -58,15 +58,16 @@ void setup() {
 }
 
 void loop() {
-    int temp1 = analogRead(0);
-    int temp2 = analogRead(1);
-    int temp3 = analogRead(4);
-    int temp4 = analogRead(5);
+    int s0 = analogRead(0);
+    int s1 = analogRead(1);
+    int s2 = analogRead(4);
+    int s3 = analogRead(5);
 
     if (DEBUGFLAG) {
-        Serial.println(String(temp1) + " : " + String(temp2) + " : " + String(temp3) + " : " + String(temp4));
+        // Serial.println(String(temp1) + " : " + String(temp2) + " : " + String(temp3) + " : " + String(temp4));
     }
-    linePos = getLinePosition(linePos, temp1, temp2, temp3, temp4);
+    int temp[4] = {s0, s1, s2, s3};
+    linePos = getLinePosition(linePos, temp);
     doPID();
     setMotors();
     delay(100);
@@ -75,28 +76,25 @@ void loop() {
 float getLinePosition(float prev, int s[4]) {
     float newLinePos = 0;
 
-    int lineIntensity[4] = {0, 0, 0, 0};
+    float lineIntensity[4] = {0, 0, 0, 0};
     colours lineColour[4] = {white, white, white, white};
 
     for (int i = 0; i < 4; i++) {
         if (s[i] > THRESHOLDS[i]) {
             int TOP = GREEN[i], BOT = THRESHOLDS[i];
             lineColour[i] = green;
-            if (s[i] < RED[i]) {  // Must be a better way to do this, but no time
-                BOT = GREEN[i];
+            if (s[i] > GREEN[i] && s[i] < RED[i]) {  // Must be a better way to do this, but no time
                 TOP = RED[i];
                 lineColour[i] = red;
             } else if (s[i] < BLUE[i]) {
-                BOT = RED[i];
                 TOP = BLUE[i];
                 lineColour[i] = blue;
             } else if (s[i] < BLACK[i]) {
-                BOT = BLUE[i];
                 TOP = BLACK[i];
                 lineColour[i] = black;
             }
 
-            lineIntensity[i] = (s[i] - BOT) / (TOP - BOT);
+            lineIntensity[i] = (float)(s[i] - BOT) / (float)(TOP - BOT);
         }
     }
 
@@ -104,6 +102,12 @@ float getLinePosition(float prev, int s[4]) {
     newLinePos -= lineIntensity[1];
     newLinePos += lineIntensity[2];
     newLinePos += (lineIntensity[3] > 0) ? (2 * lineIntensity[3] - lineIntensity[2]) : 0;
+
+    if (DEBUGFLAG) {
+        Serial.println(String(newLinePos) +
+                       " \t: " + String(s[0]) + " : " + String(s[1]) + " : " + String(s[2]) + " : " + String(s[3]) +
+                       " \t: " + String(lineColour[0]) + " : " + String(lineColour[1]) + " : " + String(lineColour[2]) + " : " + String(lineColour[3]));
+    }
 
     pErr = err;
     err = newLinePos - prev;
