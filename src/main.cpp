@@ -5,17 +5,22 @@
 #define OFFSET_LEFT 194
 #define DEBUGFLAG true
 
-int leftSpeed, rightSpeed;
-float linePos;
-float kp, ki, kd;
-float err, pErr, cErr;
-
 enum colours { white = 0,
                green = 1,
                red = 2,
                blue = 3,
                black = 4
 };
+
+void setMotors();
+float getLinePosition(int prevLinePos, int s[4]);
+void doPID();
+String getColour(colours c);
+
+int leftSpeed, rightSpeed;
+float linePos;
+float kp, ki, kd;
+float err, pErr, cErr;
 
 colours racingColour = green;
 
@@ -26,16 +31,12 @@ int BLUE[4] = {2900, 2400, 2000, 2850};
 int BLACK[4] = {3850, 3200, 2900, 3700};
 int THRESHOLDS[4] = {(WHITE[0] + GREEN[0]) / 2, (WHITE[1] + GREEN[1]) / 2, (WHITE[2] + GREEN[2]) / 2, (WHITE[3] + GREEN[3]) / 2};
 
-void setMotors();
-float getLinePosition(float prev, int s[4]);
-void doPID();
-
 void setup() {
     leftSpeed = 0;
     rightSpeed = 0;
 
     linePos = 0;
-    kp = 1;
+    kp = 10;
     ki = 0;
     kd = 0;
 
@@ -73,7 +74,7 @@ void loop() {
     delay(100);
 }
 
-float getLinePosition(float prev, int s[4]) {
+float getLinePosition(int prevLinePos, int s[4]) {
     float newLinePos = 0;
 
     float lineIntensity[4] = {0, 0, 0, 0};
@@ -82,8 +83,9 @@ float getLinePosition(float prev, int s[4]) {
     for (int i = 0; i < 4; i++) {
         if (s[i] > THRESHOLDS[i]) {
             int TOP = GREEN[i], BOT = THRESHOLDS[i];
-            lineColour[i] = green;
-            if (s[i] > GREEN[i] && s[i] < RED[i]) {  // Must be a better way to do this, but no time
+            if (s[i] < GREEN[i]) {
+                lineColour[i] = green;
+            } else if (s[i] < RED[i]) {  // Must be a better way to do this, but no time
                 TOP = RED[i];
                 lineColour[i] = red;
             } else if (s[i] < BLUE[i]) {
@@ -98,33 +100,50 @@ float getLinePosition(float prev, int s[4]) {
         }
     }
 
-    newLinePos -= (lineIntensity[0] > 0) ? (2 * lineIntensity[0] - lineIntensity[1]) : 0;
+    newLinePos -= (lineIntensity[0] > 0) ? (lineIntensity[1] > 0) ? (2 * lineIntensity[0] - lineIntensity[1]) : 3 - lineIntensity[0] : 0;
     newLinePos -= lineIntensity[1];
     newLinePos += lineIntensity[2];
-    newLinePos += (lineIntensity[3] > 0) ? (2 * lineIntensity[3] - lineIntensity[2]) : 0;
+    newLinePos += (lineIntensity[3] > 0) ? (lineIntensity[2] > 0) ? (2 * lineIntensity[3] - lineIntensity[2]) : 3 - lineIntensity[3] : 0;
 
-    if (DEBUGFLAG) {
-        Serial.println(String(newLinePos) +
-                       " \t: " + String(s[0]) + " : " + String(s[1]) + " : " + String(s[2]) + " : " + String(s[3]) +
-                       " \t: " + String(lineColour[0]) + " : " + String(lineColour[1]) + " : " + String(lineColour[2]) + " : " + String(lineColour[3]));
-    }
+    // if (DEBUGFLAG) {
+    //     Serial.println(String(newLinePos) +
+    //                    " \t: " + String(s[0]) + " : " + String(s[1]) + " : " + String(s[2]) + " : " + String(s[3]) +
+    //                    " \t: " + getColour(lineColour[0]) + " : " + getColour(lineColour[1]) + " : " + getColour(lineColour[2]) + " : " + getColour(lineColour[3]));
+    // }
+
+    newLinePos = (lineIntensity[0] == 0 && lineIntensity[1] == 0 && lineIntensity[2] == 0 && lineIntensity[3] == 0)
+                     ? (prevLinePos > 0)
+                           ? 5
+                           : -5
+                     : newLinePos;
 
     pErr = err;
-    err = newLinePos - prev;
+    err = newLinePos;
     cErr += err;
     return newLinePos;
 }
 
 void doPID() {
     float tempPID = kp * err + ki * cErr + kd * (err - pErr);
-    rightSpeed = tempPID + SPEED;
+    rightSpeed = -tempPID + SPEED;
     leftSpeed = tempPID + SPEED;
+    // if (DEBUGFLAG) {
+    //     Serial.println(String(linePos) +
+    //                    " \t: " + String(rightSpeed) + " : " + String(leftSpeed) +
+    //                    " \t: " + String(tempPID) +
+    //                    " \t: P- " + String(kp * err) + " : I-" + String(ki * cErr) + " : D-" + String(kd * (err - pErr)));
+    // }
 }
 
 void setMotors() {
-    if (DEBUGFLAG) {
-        // Serial.println(String(rightSpeed) + " : " + String(leftSpeed));
-    }
+    if (rightSpeed > 255)  // Cap out speed values
+        rightSpeed = 255;
+    else if (rightSpeed < -255)
+        rightSpeed = -255;
+    if (leftSpeed > 255)
+        leftSpeed = 255;
+    else if (leftSpeed < -255)
+        leftSpeed = -255;
 
     if (rightSpeed > 0) {
         ledcWrite(0, OFFSET_RIGHT - rightSpeed);
@@ -140,5 +159,28 @@ void setMotors() {
     } else {
         ledcWrite(0, OFFSET_RIGHT - (MAXSPEED - abs(leftSpeed)));
         digitalWrite(20, false);
+    }
+}
+
+String getColour(colours c) {
+    switch (c) {
+        case white:
+            return " ";
+            break;
+        case green:
+            return "G";
+            break;
+        case red:
+            return "R";
+            break;
+        case blue:
+            return "B";
+            break;
+        case black:
+            return "X";
+            break;
+        default:
+            return "?";
+            break;
     }
 }
