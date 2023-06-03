@@ -1,9 +1,13 @@
 #include <Arduino.h>
+
 #define MAXSPEED 255
 #define SPEED 255
 #define OFFSET_RIGHT 55
 #define OFFSET_LEFT 55
 #define DEBUGFLAG true
+#define ACCELADD 0b0011101
+
+#define ACCELADD 0b0011101
 
 enum colours { white = 0,
                green = 1,
@@ -34,15 +38,15 @@ int BLUE[4] = {2900, 2400, 2000, 2850};
 int BLACK[4] = {3850, 3200, 2900, 3700};
 int THRESHOLDS[4] = {(2 * WHITE[0] + GREEN[0]) / 3, (2 * WHITE[1] + GREEN[1]) / 3, (2 * WHITE[2] + GREEN[2]) / 3, (2 * WHITE[3] + GREEN[3]) / 3};
 
-int FLAG_HISTORY[4] = {0, 0, 0, 0};
-
 void setup() {
+    Wire.begin();
+
     leftSpeed = 0;
     rightSpeed = 0;
 
     linePos = 0;
     kp = 75;
-    ki = 0.01;
+    ki = 0;  //.01;
     kd = 15;
 
     maxTurn = 5;
@@ -61,7 +65,7 @@ void setup() {
     ledcSetup(1, 1000, 8);
 
     if (DEBUGFLAG) {
-        Serial.begin(11500);
+        Serial.begin(115200);
         Serial.println();
         Serial.println();
     }
@@ -77,7 +81,7 @@ void loop() {
     int s3 = analogRead(5);
 
     if (DEBUGFLAG) {
-        // Serial.println(String(temp1) + " : " + String(temp2) + " : " + String(temp3) + " : " + String(temp4));
+        // Serial.println(String(s0) + " : " + String(s1) + " : " + String(s2) + " : " + String(s3));
     }
     int temp[4] = {s0, s1, s2, s3};
     linePos = getLinePosition(linePos, temp);
@@ -111,7 +115,7 @@ float getLinePosition(int prevLinePos, int s[4]) {
             //     TOP = BLACK[i];
             //     lineColour[i] = black;
             // }
-            if (s[i] > GREEN[i]) {
+            if (s[i] > (GREEN[i])) {
                 lineIntensity[i] = 0;
             } else {
                 lineIntensity[i] = ((float)(s[i] - BOT) / (float)(TOP - BOT));
@@ -125,6 +129,7 @@ float getLinePosition(int prevLinePos, int s[4]) {
                 : -maxTurn;
     } else {
         float normalizer = 0;
+
         for (int i = 0; i < 4; i++) {
             if (normalizer < abs(lineIntensity[i]))
                 normalizer = abs(lineIntensity[i]);
@@ -214,15 +219,18 @@ void setMotors() {
 }
 
 void calibrate() {
-    delay(1000);
-    for (int i = 0; i < 4; i++) {
-        GREEN[i] = 0;
-        WHITE[i] = 5000;
-    }
     ledcWrite(0, MAXSPEED);
     digitalWrite(20, true);
     ledcWrite(1, MAXSPEED);
     digitalWrite(6, true);
+
+    delay(1000);
+
+    for (int i = 0; i < 4; i++) {
+        GREEN[i] = 0;
+        WHITE[i] = 5000;
+    }
+
     while (digitalRead(2) == 1) {
         int s0 = analogRead(0);
         int s1 = analogRead(1);
@@ -236,7 +244,7 @@ void calibrate() {
                 GREEN[i] = s[i];
         }
     }
-    delay(100);
+    delay(1000);
     while (digitalRead(2) == 1) {
         delay(1);
     }
